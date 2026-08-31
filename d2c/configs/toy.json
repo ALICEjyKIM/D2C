@@ -1,0 +1,72 @@
+{
+  "instance_id": "toy_4sku_3retailer",
+  "periods": 6,
+  "default_horizon": 1,
+  "max_d2c_skus": 2,
+  "capacity": 270,
+  "beta": 0.5,
+  "rho": 0.6,
+  "kappa": 0.2,
+  "gamma": 0.98,
+  "initial_order_retention": 1.0,
+  "skus": {
+    "A": {
+      "d2c_margin": 12,
+      "d2c_demand": 50,
+      "supply_limit": 115,
+      "capacity_use": 1
+    },
+    "B": {
+      "d2c_margin": 11,
+      "d2c_demand": 50,
+      "supply_limit": 75,
+      "capacity_use": 1
+    },
+    "C": {
+      "d2c_margin": 10,
+      "d2c_demand": 45,
+      "supply_limit": 85,
+      "capacity_use": 1
+    },
+    "D": {
+      "d2c_margin": 9,
+      "d2c_demand": 45,
+      "supply_limit": 85,
+      "capacity_use": 1
+    }
+  },
+  "retailers": {
+    "R1": {
+      "base_orders": {
+        "A": 40,
+        "C": 30
+      },
+      "wholesale_margins": {
+        "A": 8,
+        "C": 7
+      }
+    },
+    "R2": {
+      "base_orders": {
+        "A": 35,
+        "D": 30
+      },
+      "wholesale_margins": {
+        "A": 8,
+        "D": 6
+      }
+    },
+    "R3": {
+      "base_orders": {
+        "B": 30,
+        "C": 15,
+        "D": 15
+      },
+      "wholesale_margins": {
+        "B": 7,
+        "C": 6,
+        "D": 6
+      }
+    }
+  }
+}
