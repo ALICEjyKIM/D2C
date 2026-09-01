@@ -7,9 +7,9 @@ orders in response to D2C exposure.
 ## Current scope
 
 The current baseline includes a controlled 4-SKU, 3-retailer instance, validated
-JSON loading, and one Gurobi MILP formulation for both myopic (`horizon=1`) and
-look-ahead (`horizon>1`) optimization. It does not yet run a rolling-horizon
-simulation.
+JSON loading, one Gurobi MILP formulation for both myopic (`horizon=1`) and
+look-ahead (`horizon>1`) optimization, and a rolling-horizon simulator that
+compares planning horizons on realized profit.
 
 Core paths:
 
@@ -17,8 +17,10 @@ Core paths:
 - `src/types.py`: domain and solution data structures.
 - `src/instance.py`: JSON parsing, validation, and initial state construction.
 - `src/milp.py`: linear Gurobi formulation and solution extraction.
+- `src/transition.py`: deterministic order-retention update (constraint C7).
+- `src/simulator.py`: rolling-horizon run and per-period profit accounting.
 - `docs/model.md`: compact formulation reference.
-- `tests/`: data and solver checks.
+- `tests/`: data, solver, transition, and simulation checks.
 
 ## Setup
 
@@ -44,5 +46,5 @@ unusable Gurobi license is also reported as a skip.
 
 ## Next steps
 
-The next implementation sequence is `transition.py` then `simulator.py`, followed
-by rolling-horizon myopic-versus-dynamic experiments and sensitivity analysis.
+Rolling-horizon myopic-versus-dynamic experiments across instances and parameter
+sensitivity analysis (`src/experiment.py`).

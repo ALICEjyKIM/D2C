@@ -69,3 +69,30 @@ class MILPSolution:
     runtime: float
     num_variables: int
     num_constraints: int
+
+
+@dataclass(frozen=True, slots=True)
+class PeriodResult:
+    """One executed period of a rolling-horizon run, with its profit accounting."""
+
+    period: int
+    selected_d2c_skus: tuple[str, ...]
+    d2c_quantity: dict[str, float]  # i -> q[i, t]
+    retailer_quantity: dict[tuple[str, str], float]  # (r, i) -> x[r, i, t]
+    d2c_profit: float
+    wholesale_profit: float
+    total_profit: float
+    supply_slack: dict[str, float]  # i -> U[i] - shipped
+    capacity_used: float
+    capacity_utilization: float  # capacity_used / capacity
+    exposure: dict[str, float]  # r -> e[r, t]
+    order_retention: dict[str, float]  # r -> g[r, t], observed entering t
+
+
+@dataclass(frozen=True, slots=True)
+class SimulationResult:
+    instance_id: str
+    planning_horizon: int
+    periods: list[PeriodResult]
+    cumulative_profit: float  # sum_t total_profit
+    discounted_profit: float  # sum_t gamma^(t-1) total_profit
