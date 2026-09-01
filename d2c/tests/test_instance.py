@@ -46,13 +46,13 @@ def test_validation_rejects_beta_outside_unit_interval() -> None:
 
 def test_validation_rejects_mismatched_retailer_sku_keys() -> None:
     instance = load_instance(TOY_PATH)
-    retailer = instance.retailers["R1"]
-    invalid_retailer = Retailer(
+    bad_r1 = Retailer(
         retailer_id="R1",
-        base_orders=retailer.base_orders,
+        base_orders=instance.retailers["R1"].base_orders,
         wholesale_margins={"A": 8.0},
     )
-    invalid_retailers = {**instance.retailers, "R1": invalid_retailer}
 
     with pytest.raises(ValueError, match="identical SKU keys"):
-        validate_instance(replace(instance, retailers=invalid_retailers))
+        validate_instance(
+            replace(instance, retailers={**instance.retailers, "R1": bad_r1})
+        )

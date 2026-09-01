@@ -44,28 +44,19 @@ def _print_solution(instance: Instance, solution: MILPSolution) -> None:
             quantity = solution.retailer_quantity[retailer_id, sku_id, period]
             print(f"  {retailer_id}-{sku_id}: {quantity:.2f}")
 
-        capacity_used = _capacity_used(instance, solution, period)
-        print(f"Capacity used: {capacity_used:.2f} / {instance.capacity:.2f}")
-
-
-def _capacity_used(
-    instance: Instance,
-    solution: MILPSolution,
-    period: int,
-) -> float:
-    return sum(
-        sku.capacity_use
-        * (
-            solution.d2c_quantity[sku_id, period]
-            + sum(
-                solution.retailer_quantity[retailer_id, pair_sku_id, period]
-                for retailer_id, pair_sku_id
-                in instance.feasible_retailer_sku_pairs
-                if pair_sku_id == sku_id
+        capacity_used = sum(
+            sku.capacity_use
+            * (
+                solution.d2c_quantity[sku_id, period]
+                + sum(
+                    solution.retailer_quantity[r, i, period]
+                    for r, i in instance.feasible_retailer_sku_pairs
+                    if i == sku_id
+                )
             )
+            for sku_id, sku in instance.skus.items()
         )
-        for sku_id, sku in instance.skus.items()
-    )
+        print(f"Capacity used: {capacity_used:.2f} / {instance.capacity:.2f}")
 
 
 if __name__ == "__main__":

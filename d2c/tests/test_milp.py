@@ -38,15 +38,15 @@ def test_horizon_three_transitions_and_feasibility() -> None:
     _assert_solution_feasible(instance, solution)
 
     for period in (1, 2):
-        for retailer_id in instance.retailer_ids:
+        for r in instance.retailer_ids:
             expected_retention = (
-                instance.rho * solution.order_retention[retailer_id, period]
+                instance.rho * solution.order_retention[r, period]
                 + (1.0 - instance.rho)
-                * (1.0 - instance.kappa * solution.exposure[retailer_id, period])
+                * (1.0 - instance.kappa * solution.exposure[r, period])
             )
-            assert solution.order_retention[
-                retailer_id, period + 1
-            ] == pytest.approx(expected_retention, abs=TOLERANCE)
+            assert solution.order_retention[r, period + 1] == pytest.approx(
+                expected_retention, abs=TOLERANCE
+            )
 
 
 def _solve_or_skip(instance: Instance, horizon: int) -> MILPSolution:
@@ -66,56 +66,46 @@ def _assert_solution_feasible(
     instance: Instance,
     solution: MILPSolution,
 ) -> None:
-    active_periods = range(
+    periods = range(
         solution.start_period,
         solution.start_period + solution.horizon,
     )
-    for period in active_periods:
-        selected = set(solution.selected_d2c_skus[period])
+    pairs = instance.feasible_retailer_sku_pairs
+    retailers_by_sku = {
+        i: tuple(r for r, j in pairs if j == i) for i in instance.sku_ids
+    }
+    q = solution.d2c_quantity
+    x = solution.retailer_quantity
+    g = solution.order_retention
+    e = solution.exposure
+
+    for t in periods:
+        selected = set(solution.selected_d2c_skus[t])
         assert len(selected) <= instance.max_d2c_skus
 
-        for sku_id, sku in instance.skus.items():
-            d2c_quantity = solution.d2c_quantity[sku_id, period]
-            listing = float(sku_id in selected)
-            assert d2c_quantity >= -TOLERANCE
-            assert d2c_quantity <= sku.d2c_demand * listing + TOLERANCE
-
-            retailer_total = sum(
-                solution.retailer_quantity[retailer_id, pair_sku_id, period]
-                for retailer_id, pair_sku_id
-                in instance.feasible_retailer_sku_pairs
-                if pair_sku_id == sku_id
+        for i, sku in instance.skus.items():
+            y_it = float(i in selected)
+            assert q[i, t] >= -TOLERANCE
+            assert q[i, t] <= sku.d2c_demand * y_it + TOLERANCE
+            assert (
+                q[i, t] + sum(x[r, i, t] for r in retailers_by_sku[i])
+                <= sku.supply_limit + TOLERANCE
             )
-            assert d2c_quantity + retailer_total <= sku.supply_limit + TOLERANCE
 
-        for retailer_id, sku_id in instance.feasible_retailer_sku_pairs:
-            allocation = solution.retailer_quantity[retailer_id, sku_id, period]
-            actual_order = (
-                instance.retailers[retailer_id].base_orders[sku_id]
-                * solution.order_retention[retailer_id, period]
-            )
-            assert allocation >= -TOLERANCE
-            assert allocation <= actual_order + TOLERANCE
+        for r, i in pairs:
+            actual_order = instance.retailers[r].base_orders[i] * g[r, t]
+            assert x[r, i, t] >= -TOLERANCE
+            assert x[r, i, t] <= actual_order + TOLERANCE
 
         capacity_used = sum(
             sku.capacity_use
             * (
-                solution.d2c_quantity[sku_id, period]
-                + sum(
-                    solution.retailer_quantity[retailer_id, pair_sku_id, period]
-                    for retailer_id, pair_sku_id
-                    in instance.feasible_retailer_sku_pairs
-                    if pair_sku_id == sku_id
-                )
+                q[i, t] + sum(x[r, i, t] for r in retailers_by_sku[i])
             )
-            for sku_id, sku in instance.skus.items()
+            for i, sku in instance.skus.items()
         )
         assert capacity_used <= instance.capacity + TOLERANCE
 
-        for retailer_id in instance.retailer_ids:
-            assert -TOLERANCE <= solution.exposure[retailer_id, period] <= 1.0
-            assert (
-                -TOLERANCE
-                <= solution.order_retention[retailer_id, period]
-                <= 1.0 + TOLERANCE
-            )
+        for r in instance.retailer_ids:
+            assert -TOLERANCE <= e[r, t] <= 1.0
+            assert -TOLERANCE <= g[r, t] <= 1.0 + TOLERANCE
