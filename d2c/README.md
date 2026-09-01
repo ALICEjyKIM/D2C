@@ -32,6 +32,8 @@ pip install -r requirements.txt
 
 ## Run
 
+Run these commands from the `d2c/` project root.
+
 ```bash
 python main.py
 pytest -q

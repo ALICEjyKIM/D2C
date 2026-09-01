@@ -1,17 +1,10 @@
-"""Domain data structures for D2C optimization."""
+"""Domain data and solution containers for the D2C model."""
 
 from dataclasses import dataclass
 
 
-SKUPeriod = tuple[str, int]
-RetailerSKU = tuple[str, str]
-RetailerSKUPeriod = tuple[str, str, int]
-RetailerPeriod = tuple[str, int]
-
-
 @dataclass(frozen=True, slots=True)
 class SKU:
-    sku_id: str
     d2c_margin: float
     d2c_demand: float
     supply_limit: float
@@ -20,13 +13,8 @@ class SKU:
 
 @dataclass(frozen=True, slots=True)
 class Retailer:
-    retailer_id: str
     base_orders: dict[str, float]
     wholesale_margins: dict[str, float]
-
-    @property
-    def sku_ids(self) -> tuple[str, ...]:
-        return tuple(self.base_orders)
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,19 +33,12 @@ class Instance:
     retailers: dict[str, Retailer]
 
     @property
-    def sku_ids(self) -> tuple[str, ...]:
-        return tuple(self.skus)
-
-    @property
-    def retailer_ids(self) -> tuple[str, ...]:
-        return tuple(self.retailers)
-
-    @property
-    def feasible_retailer_sku_pairs(self) -> tuple[RetailerSKU, ...]:
+    def retailer_sku_pairs(self) -> tuple[tuple[str, str], ...]:
+        """The (r, i) pairs with i in I_r, in retailer then SKU order."""
         return tuple(
-            (retailer_id, sku_id)
-            for retailer_id, retailer in self.retailers.items()
-            for sku_id in retailer.sku_ids
+            (r, i)
+            for r, retailer in self.retailers.items()
+            for i in retailer.base_orders
         )
 
 
@@ -80,11 +61,11 @@ class MILPSolution:
     objective_value: float
     start_period: int
     horizon: int
-    selected_d2c_skus: dict[int, tuple[str, ...]]
-    d2c_quantity: dict[SKUPeriod, float]
-    retailer_quantity: dict[RetailerSKUPeriod, float]
-    exposure: dict[RetailerPeriod, float]
-    order_retention: dict[RetailerPeriod, float]
+    selected_d2c_skus: dict[int, tuple[str, ...]]  # t -> listed SKUs
+    d2c_quantity: dict[tuple[str, int], float]  # (i, t)
+    retailer_quantity: dict[tuple[str, str, int], float]  # (r, i, t)
+    exposure: dict[tuple[str, int], float]  # (r, t)
+    order_retention: dict[tuple[str, int], float]  # (r, t)
     runtime: float
     num_variables: int
     num_constraints: int

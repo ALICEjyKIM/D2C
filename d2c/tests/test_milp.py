@@ -1,7 +1,4 @@
-"""Feasibility and dynamics tests for the Gurobi model."""
-
 import math
-from pathlib import Path
 
 import pytest
 
@@ -10,102 +7,84 @@ gp = pytest.importorskip("gurobipy")
 
 from src.instance import load_instance, make_initial_state  # noqa: E402
 from src.milp import solve_milp  # noqa: E402
-from src.types import Instance, MILPSolution, SolverConfig  # noqa: E402
 
 
-TOY_PATH = Path(__file__).resolve().parents[1] / "configs" / "toy.json"
-TOLERANCE = 1e-6
+TOY_PATH = "configs/toy.json"
+TOL = 1e-6
 
 
-def test_horizon_one_solution_is_feasible_and_intuitive() -> None:
-    instance = load_instance(TOY_PATH)
-    solution = _solve_or_skip(instance, horizon=1)
-
-    assert solution.status == "OPTIMAL"
-    assert math.isfinite(solution.objective_value)
-    assert solution.horizon == 1
-    assert set(solution.selected_d2c_skus[1]) == {"A", "B"}
-    _assert_solution_feasible(instance, solution)
+@pytest.fixture
+def toy():
+    return load_instance(TOY_PATH)
 
 
-def test_horizon_three_transitions_and_feasibility() -> None:
-    instance = load_instance(TOY_PATH)
-    solution = _solve_or_skip(instance, horizon=3)
-
-    assert solution.status == "OPTIMAL"
-    assert solution.horizon == 3
-    assert solution.selected_d2c_skus.keys() == {1, 2, 3}
-    _assert_solution_feasible(instance, solution)
-
-    for period in (1, 2):
-        for r in instance.retailer_ids:
-            expected_retention = (
-                instance.rho * solution.order_retention[r, period]
-                + (1.0 - instance.rho)
-                * (1.0 - instance.kappa * solution.exposure[r, period])
-            )
-            assert solution.order_retention[r, period + 1] == pytest.approx(
-                expected_retention, abs=TOLERANCE
-            )
-
-
-def _solve_or_skip(instance: Instance, horizon: int) -> MILPSolution:
+def solve(instance, horizon):
     try:
-        return solve_milp(
-            instance=instance,
-            state=make_initial_state(instance),
-            start_period=1,
-            horizon=horizon,
-            solver_config=SolverConfig(output_flag=False),
-        )
+        return solve_milp(instance, make_initial_state(instance), horizon)
     except gp.GurobiError as exc:
         pytest.skip(f"Gurobi license or runtime is unavailable: {exc}")
 
 
-def _assert_solution_feasible(
-    instance: Instance,
-    solution: MILPSolution,
-) -> None:
-    periods = range(
-        solution.start_period,
-        solution.start_period + solution.horizon,
+def test_horizon_one_solution_is_feasible_and_intuitive(toy):
+    solution = solve(toy, horizon=1)
+
+    assert solution.status == "OPTIMAL"
+    assert math.isfinite(solution.objective_value)
+    assert solution.horizon == 1
+    # A and B carry the two largest D2C margins and are not supply constrained.
+    assert set(solution.selected_d2c_skus[1]) == {"A", "B"}
+    assert_feasible(toy, solution)
+
+
+def test_horizon_three_transitions_and_feasibility(toy):
+    solution = solve(toy, horizon=3)
+
+    assert solution.status == "OPTIMAL"
+    assert solution.horizon == 3
+    assert solution.selected_d2c_skus.keys() == {1, 2, 3}
+    assert_feasible(toy, solution)
+
+    for t in (1, 2):
+        for r in toy.retailers:
+            expected = toy.rho * solution.order_retention[r, t] + (1.0 - toy.rho) * (
+                1.0 - toy.kappa * solution.exposure[r, t]
+            )
+            got = solution.order_retention[r, t + 1]
+            assert got == pytest.approx(expected, abs=TOL)
+
+
+def assert_feasible(instance, solution):
+    """Re-check C1-C8 against the reported solution values."""
+    periods = range(solution.start_period, solution.start_period + solution.horizon)
+    pairs = instance.retailer_sku_pairs
+    retailers_of = {i: [r for r, j in pairs if j == i] for i in instance.skus}
+    q, x, g, e = (
+        solution.d2c_quantity,
+        solution.retailer_quantity,
+        solution.order_retention,
+        solution.exposure,
     )
-    pairs = instance.feasible_retailer_sku_pairs
-    retailers_by_sku = {
-        i: tuple(r for r, j in pairs if j == i) for i in instance.sku_ids
-    }
-    q = solution.d2c_quantity
-    x = solution.retailer_quantity
-    g = solution.order_retention
-    e = solution.exposure
 
     for t in periods:
         selected = set(solution.selected_d2c_skus[t])
         assert len(selected) <= instance.max_d2c_skus
 
         for i, sku in instance.skus.items():
-            y_it = float(i in selected)
-            assert q[i, t] >= -TOLERANCE
-            assert q[i, t] <= sku.d2c_demand * y_it + TOLERANCE
-            assert (
-                q[i, t] + sum(x[r, i, t] for r in retailers_by_sku[i])
-                <= sku.supply_limit + TOLERANCE
-            )
+            shipped = q[i, t] + sum(x[r, i, t] for r in retailers_of[i])
+            assert q[i, t] >= -TOL
+            assert q[i, t] <= sku.d2c_demand * (i in selected) + TOL
+            assert shipped <= sku.supply_limit + TOL
 
         for r, i in pairs:
-            actual_order = instance.retailers[r].base_orders[i] * g[r, t]
-            assert x[r, i, t] >= -TOLERANCE
-            assert x[r, i, t] <= actual_order + TOLERANCE
+            order = instance.retailers[r].base_orders[i] * g[r, t]
+            assert -TOL <= x[r, i, t] <= order + TOL
 
         capacity_used = sum(
-            sku.capacity_use
-            * (
-                q[i, t] + sum(x[r, i, t] for r in retailers_by_sku[i])
-            )
+            sku.capacity_use * (q[i, t] + sum(x[r, i, t] for r in retailers_of[i]))
             for i, sku in instance.skus.items()
         )
-        assert capacity_used <= instance.capacity + TOLERANCE
+        assert capacity_used <= instance.capacity + TOL
 
-        for r in instance.retailer_ids:
-            assert -TOLERANCE <= e[r, t] <= 1.0
-            assert -TOLERANCE <= g[r, t] <= 1.0 + TOLERANCE
+        for r in instance.retailers:
+            assert -TOL <= e[r, t] <= 1.0
+            assert -TOL <= g[r, t] <= 1.0 + TOL
