@@ -10,7 +10,6 @@ from pathlib import Path
 from statistics import fmean
 
 from src.instance import load_instance, validate_instance
-from src.simulator import run_simulation
 from src.types import Instance, SKU
 
 
@@ -19,6 +18,13 @@ TOY_PATH = ROOT / "configs" / "toy.json"
 CONFIG_PATH = ROOT / "configs" / "controlled_experiments.json"
 RESULTS_PATH = ROOT / "results"
 POLICIES = ("myopic", "lookahead")
+
+
+def run_simulation(*args, **kwargs):
+    """실험을 실행할 때만 solver 의존 모듈을 불러온다."""
+    from src.simulator import run_simulation as simulate
+
+    return simulate(*args, **kwargs)
 
 
 def load_experiment_levels(path: str | Path = CONFIG_PATH) -> dict:
