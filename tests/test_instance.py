@@ -27,6 +27,12 @@ def test_load_toy_instance(toy):
         ("R3", "C"),
         ("R3", "D"),
     )
+    assert {i: sku.d2c_margin for i, sku in toy.skus.items()} == {
+        "A": 10.0,
+        "B": 9.0,
+        "C": 8.25,
+        "D": 7.5,
+    }
 
 
 def test_initial_retention_is_one_for_all_retailers(toy):

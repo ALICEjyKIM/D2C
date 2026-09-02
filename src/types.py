@@ -78,6 +78,44 @@ class MILPSolution:
 
 
 @dataclass(frozen=True, slots=True)
+class ScenarioBestResult:
+    scenario_id: str
+    best_profit: float
+    solution: MILPSolution
+
+
+@dataclass(frozen=True, slots=True)
+class FirstStageDecision:
+    selected_d2c_skus: tuple[str, ...]
+    d2c_quantity: dict[str, float]
+    retailer_quantity: dict[tuple[str, str], float]
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioRegretResult:
+    scenario_id: str
+    best_profit: float
+    policy_profit: float
+    absolute_regret: float
+    relative_regret: float
+    solution: MILPSolution
+
+
+@dataclass(frozen=True, slots=True)
+class MinimaxRegretResult:
+    status: str
+    theta: float
+    start_period: int
+    horizon: int
+    common_decision: FirstStageDecision
+    scenario_results: dict[str, ScenarioRegretResult]
+    worst_scenario: str
+    runtime: float
+    num_variables: int
+    num_constraints: int
+
+
+@dataclass(frozen=True, slots=True)
 class PeriodResult:
     """Rolling-horizon에서 실제 실행한 한 기간의 결과."""
 

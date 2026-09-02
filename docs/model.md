@@ -5,10 +5,11 @@
 - `I`: SKUs; `R`: retailers; `T`: periods; `I_r`: SKUs carried by retailer `r`.
 - `q_bar[i,t]`: D2C demand, `U[i,t]`: SKU supply limit, `C[t]`: shared capacity.
 - `mu[r,i,t]`: baseline retailer order, `a[i]`: capacity use.
-- `pi_d2c[i]`, `pi_wholesale[r,i]`: unit margins.
+- `pi_d2c[i]`, `pi_wholesale[r,i]`: 모든 채널 변동비를 차감한 단위 순기여이익.
 - `K`, `beta`, `rho`, `kappa`, `gamma`: assortment and dynamic parameters.
 
 The toy instance uses period-invariant values for `q_bar`, `U`, `C`, and `mu`.
+고정비와 재고비용은 현재 목적함수에 포함하지 않는다.
 
 ## Variables
 
@@ -42,6 +43,22 @@ maximize sum_t gamma^(t-s) * (
 
 At the active start period, `g[r,s]` is fixed to the supplied `State`. C7 is
 added only when both `t` and `t+1` are active.
+
+## Minimax relative regret
+
+시나리오별 수요, 순기여이익, 반응계수와 지속계수를 C1, C3, C6, C7 및
+목적함수에 직접 적용한다. 각 시나리오의 결정론적 최적값을 `z_star[s]`로
+계산한 뒤 다음 extensive-form을 푼다.
+
+```text
+minimize theta
+z[s] >= z_star[s] - theta * max(epsilon, abs(z_star[s]))
+theta >= 0
+```
+
+현재 기간의 `y`, `q`, `x`는 모든 시나리오에서 같고, 이후 기간의 계획은
+시나리오별로 달라질 수 있다. `z_star[s]`와 `z[s]`는 기존 MILP와 동일하게
+`gamma`가 적용된 할인 계획이익이다. D2C 고정비용은 0으로 유지한다.
 
 ## Python mapping
 

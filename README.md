@@ -2,7 +2,8 @@
 
 This project studies a manufacturer's dynamic D2C assortment and channel
 allocation decisions while independent retailers adjust their future baseline
-orders in response to D2C exposure.
+orders in response to D2C exposure. It also supports exact minimax relative
+regret planning over a finite scenario set.
 
 ## Current scope
 
@@ -19,6 +20,8 @@ Core paths:
 - `src/milp.py`: linear Gurobi formulation and solution extraction.
 - `src/transition.py`: deterministic order-retention update (constraint C7).
 - `src/simulator.py`: rolling-horizon run and per-period profit accounting.
+- `src/scenarios.py`: LHS paths and the three regret verification scenarios.
+- `src/regret_experiment.py`: exact three-scenario regret verification run.
 - `docs/model.md`: compact formulation reference.
 - `tests/`: data, solver, transition, and simulation checks.
 
@@ -38,6 +41,7 @@ Run these commands from the `d2c/` project root.
 
 ```bash
 python main.py
+python -m src.regret_experiment
 pytest -q
 ```
 
@@ -46,5 +50,5 @@ unusable Gurobi license is also reported as a skip.
 
 ## Next steps
 
-Rolling-horizon myopic-versus-dynamic experiments across instances and parameter
-sensitivity analysis (`src/experiment.py`).
+Connect the exact regret decision to rolling evaluation paths before adding any
+scenario-screening heuristic.

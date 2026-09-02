@@ -6,6 +6,7 @@ import pytest
 import src.scenarios as scenario_module
 from src.instance import load_instance
 from src.scenarios import (
+    build_regret_scenarios,
     generate_evaluation_paths,
     generate_planning_scenarios,
     sample_range,
@@ -56,8 +57,9 @@ def test_generated_values_stay_inside_requested_ranges(toy):
                         retailer.wholesale_margins[i],
                         uncertainty,
                     )
-            assert 0.0 <= row["persistence"] <= 1.0
-            assert_in_range(row["persistence"], toy.rho, uncertainty)
+            for value in row["persistence"].values():
+                assert 0.0 <= value <= 1.0
+                assert_in_range(value, toy.rho, uncertainty)
 
 
 def test_same_seed_repeats_and_different_seed_changes_paths(toy):
@@ -97,7 +99,22 @@ def test_zero_uncertainty_preserves_base_values_and_instance(toy):
             assert row["response"] == {
                 r: toy.response_for(r) for r in toy.retailers
             }
-            assert row["persistence"] == toy.rho
+            assert row["persistence"] == {r: toy.rho for r in toy.retailers}
+
+
+def test_builds_three_explicit_regret_scenarios(toy):
+    scenarios = build_regret_scenarios(toy)
+
+    assert [scenario["scenario_id"] for scenario in scenarios] == [
+        "D2C-friendly",
+        "Balanced",
+        "Relationship-sensitive",
+    ]
+    assert validate_scenarios(scenarios)
+    assert scenarios[0]["periods"][0]["d2c_demand"]["A"] > toy.skus["A"].d2c_demand
+    assert scenarios[2]["periods"][0]["response"] == {
+        r: 0.6 for r in toy.retailers
+    }
 
 
 def test_sample_range_uses_each_latin_hypercube_stratum_once():

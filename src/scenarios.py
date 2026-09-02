@@ -111,7 +111,8 @@ def validate_scenarios(scenarios):
             responses = list(_nested_values(row["response"]))
             if not responses or any(not 0 <= value <= 1 for value in responses):
                 raise ValueError("response values must be in [0, 1]")
-            if not 0 <= row["persistence"] <= 1:
+            persistence = list(_nested_values(row["persistence"]))
+            if not persistence or any(not 0 <= value <= 1 for value in persistence):
                 raise ValueError("persistence must be in [0, 1]")
     return True
 
@@ -136,8 +137,7 @@ def _generate_paths(
     dimensions_per_period = (
         3 * len(instance.skus)
         + 2 * len(instance.retailer_sku_pairs)
-        + len(instance.retailers)
-        + 1
+        + 2 * len(instance.retailers)
     )
     dimensions = len(periods) * dimensions_per_period
     unit_samples = _latin_hypercube(num_scenarios, dimensions, seed)
@@ -189,7 +189,10 @@ def _generate_paths(
                 for r in instance.retailers
             }
             # 반응계수는 0과 1 사이로 제한한다
-            persistence = draw(instance.rho, unit_interval=True)
+            persistence = {
+                r: draw(instance.rho, unit_interval=True)
+                for r in instance.retailers
+            }
             period_rows.append(
                 {
                     "period": period,
@@ -207,6 +210,78 @@ def _generate_paths(
             {
                 "scenario_id": f"{prefix}{scenario_index:03d}",
                 "kind": kind,
+                "start_period": start_period,
+                "end_period": end_period,
+                "periods": period_rows,
+            }
+        )
+
+    validate_scenarios(scenarios)
+    return scenarios
+
+
+def build_regret_scenarios(
+    instance: Instance,
+    start_period: int = 1,
+    end_period: int | None = None,
+) -> list[dict]:
+    """정확한 regret 모형을 검산할 세 가지 경로를 만든다."""
+    end_period = instance.periods if end_period is None else end_period
+    if not 1 <= start_period <= end_period <= instance.periods:
+        raise ValueError("period range lies outside the instance periods")
+
+    retailer_margin = {i: [] for i in instance.skus}
+    for retailer in instance.retailers.values():
+        for i, margin in retailer.wholesale_margins.items():
+            retailer_margin[i].append(margin)
+    average_margin = {
+        i: sum(values) / len(values) for i, values in retailer_margin.items()
+    }
+
+    # 기존 통제실험의 상하단과 기준값으로 세 경로를 만든다
+    settings = (
+        ("D2C-friendly", 1.2, 1.5, 0.2, 0.9),
+        ("Balanced", 1.0, 1.0, None, instance.rho),
+        ("Relationship-sensitive", 1.0, 1.0, 0.6, 0.4),
+    )
+    scenarios = []
+    for scenario_id, demand_level, margin_level, response, persistence in settings:
+        period_rows = []
+        for period in range(start_period, end_period + 1):
+            period_rows.append(
+                {
+                    "period": period,
+                    "d2c_demand": {
+                        i: demand_level * sku.d2c_demand
+                        for i, sku in instance.skus.items()
+                    },
+                    "retailer_base_demand": {
+                        r: dict(retailer.base_orders)
+                        for r, retailer in instance.retailers.items()
+                    },
+                    "d2c_margin": {
+                        i: average_margin[i]
+                        + margin_level * (sku.d2c_margin - average_margin[i])
+                        for i, sku in instance.skus.items()
+                    },
+                    "retailer_margin": {
+                        r: dict(retailer.wholesale_margins)
+                        for r, retailer in instance.retailers.items()
+                    },
+                    "d2c_fixed_cost": {i: 0.0 for i in instance.skus},
+                    "response": {
+                        r: instance.response_for(r) if response is None else response
+                        for r in instance.retailers
+                    },
+                    "persistence": {
+                        r: persistence for r in instance.retailers
+                    },
+                }
+            )
+        scenarios.append(
+            {
+                "scenario_id": scenario_id,
+                "kind": "planning",
                 "start_period": start_period,
                 "end_period": end_period,
                 "periods": period_rows,

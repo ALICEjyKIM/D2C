@@ -31,7 +31,7 @@ def test_horizon_one_solution_is_feasible_and_intuitive(toy):
     assert solution.status == "OPTIMAL"
     assert math.isfinite(solution.objective_value)
     assert solution.horizon == 1
-    # A와 B는 D2C margin이 가장 높고 현재 공급 조건에서도 선택 가능하다.
+    # A와 B는 순기여이익이 가장 높고 현재 공급 조건에서도 선택 가능하다.
     assert set(solution.selected_d2c_skus[1]) == {"A", "B"}
     assert_feasible(toy, solution)
 
