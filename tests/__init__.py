@@ -1,1 +1,1 @@
-"""Tests for the D2C research model."""
+"""D2C 연구 모델 테스트."""

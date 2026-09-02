@@ -1,4 +1,4 @@
-"""Instance loading and validation."""
+"""Instance를 읽고 최적화 전에 입력값을 확인한다."""
 
 import json
 import math
@@ -44,6 +44,14 @@ def load_instance(path: str | Path) -> Instance:
                 )
                 for r, row in data["retailers"].items()
             },
+            retailer_responses=(
+                {
+                    r: float(value)
+                    for r, value in data["retailer_responses"].items()
+                }
+                if data.get("retailer_responses") is not None
+                else None
+            ),
         )
     except (KeyError, TypeError, AttributeError) as exc:
         raise ValueError(f"malformed instance in {path}: {exc}") from exc
@@ -70,10 +78,16 @@ def validate_instance(instance: Instance):
     if not 0 < instance.gamma <= 1:
         raise ValueError("gamma must be in (0, 1]")
 
+    if instance.retailer_responses is not None:
+        if instance.retailer_responses.keys() != instance.retailers.keys():
+            raise ValueError("retailer_responses must cover exactly all retailers")
+        for r, response in instance.retailer_responses.items():
+            _unit_interval(response, f"retailer {r} response")
+
     for i, sku in instance.skus.items():
         _nonnegative(sku.d2c_margin, f"SKU {i} d2c_margin")
         _nonnegative(sku.supply_limit, f"SKU {i} supply_limit")
-        # C1 and C6 divide by d2c_demand, C5 scales by capacity_use.
+        # d2c_demand는 C1/C6에서, capacity_use는 C5에서 양수여야 한다.
         _positive(sku.d2c_demand, f"SKU {i} d2c_demand")
         _positive(sku.capacity_use, f"SKU {i} capacity_use")
 

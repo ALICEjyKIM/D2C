@@ -1,4 +1,4 @@
-"""Domain data and solution containers for the D2C model."""
+"""D2C 모델에서 쓰는 데이터와 결과 타입."""
 
 from dataclasses import dataclass
 
@@ -31,15 +31,21 @@ class Instance:
     initial_order_retention: float
     skus: dict[str, SKU]
     retailers: dict[str, Retailer]
+    retailer_responses: dict[str, float] | None = None
 
     @property
     def retailer_sku_pairs(self) -> tuple[tuple[str, str], ...]:
-        """The (r, i) pairs with i in I_r, in retailer then SKU order."""
+        """Retailer가 실제로 취급하는 (r, i) 조합만 반환한다."""
         return tuple(
             (r, i)
             for r, retailer in self.retailers.items()
             for i in retailer.base_orders
         )
+
+    def response_for(self, retailer: str) -> float:
+        if self.retailer_responses is None:
+            return self.kappa
+        return self.retailer_responses[retailer]
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,11 +67,11 @@ class MILPSolution:
     objective_value: float
     start_period: int
     horizon: int
-    selected_d2c_skus: dict[int, tuple[str, ...]]  # t -> listed SKUs
-    d2c_quantity: dict[tuple[str, int], float]  # (i, t)
-    retailer_quantity: dict[tuple[str, str, int], float]  # (r, i, t)
-    exposure: dict[tuple[str, int], float]  # (r, t)
-    order_retention: dict[tuple[str, int], float]  # (r, t)
+    selected_d2c_skus: dict[int, tuple[str, ...]]  # 기간별 D2C assortment
+    d2c_quantity: dict[tuple[str, int], float]  # (SKU, 기간)
+    retailer_quantity: dict[tuple[str, str, int], float]  # (Retailer, SKU, 기간)
+    exposure: dict[tuple[str, int], float]  # (Retailer, 기간)
+    order_retention: dict[tuple[str, int], float]  # (Retailer, 기간)
     runtime: float
     num_variables: int
     num_constraints: int
@@ -73,26 +79,31 @@ class MILPSolution:
 
 @dataclass(frozen=True, slots=True)
 class PeriodResult:
-    """One executed period of a rolling-horizon run, with its profit accounting."""
+    """Rolling-horizon에서 실제 실행한 한 기간의 결과."""
 
     period: int
     selected_d2c_skus: tuple[str, ...]
-    d2c_quantity: dict[str, float]  # i -> q[i, t]
-    retailer_quantity: dict[tuple[str, str], float]  # (r, i) -> x[r, i, t]
+    d2c_quantity: dict[str, float]  # SKU별 q[i, t]
+    retailer_quantity: dict[tuple[str, str], float]  # (r, i)별 x[r, i, t]
     d2c_profit: float
     wholesale_profit: float
     total_profit: float
-    supply_slack: dict[str, float]  # i -> U[i] - shipped
+    supply_slack: dict[str, float]  # SKU별 남은 공급 여력
     capacity_used: float
-    capacity_utilization: float  # capacity_used / capacity
-    exposure: dict[str, float]  # r -> e[r, t]
-    order_retention: dict[str, float]  # r -> g[r, t], observed entering t
+    capacity_utilization: float  # 사용량 / 전체 capacity
+    exposure: dict[str, float]  # Retailer별 e[r, t]
+    order_retention: dict[str, float]  # 기간 시작 시점의 g[r, t]
 
 
 @dataclass(frozen=True, slots=True)
 class SimulationResult:
     instance_id: str
+    policy: str
     planning_horizon: int
     periods: list[PeriodResult]
-    cumulative_profit: float  # sum_t total_profit
-    discounted_profit: float  # sum_t gamma^(t-1) total_profit
+    cumulative_profit: float  # 기간별 이익의 단순 합
+    discounted_profit: float  # gamma를 적용한 기간별 이익의 합
+
+    @property
+    def total_profit(self) -> float:
+        return self.cumulative_profit

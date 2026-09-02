@@ -1,6 +1,6 @@
 {
   "instance_id": "toy_4sku_3retailer",
-  "periods": 6,
+  "periods": 3,
   "default_horizon": 1,
   "max_d2c_skus": 2,
   "capacity": 270,

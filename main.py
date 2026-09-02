@@ -1,8 +1,8 @@
-"""Solve the controlled toy instance and run rolling-horizon policy comparisons."""
+"""Toy instance를 풀고 rolling-horizon 정책 결과를 비교한다."""
 
 from src.instance import load_instance, make_initial_state
 from src.milp import solve_milp
-from src.simulator import period_result, simulate
+from src.simulator import period_result, run_simulation
 from src.types import Instance, MILPSolution, SimulationResult
 
 INSTANCE_PATH = "configs/toy.json"
@@ -16,8 +16,8 @@ def main():
     report(instance, solve_milp(instance, state, instance.default_horizon))
 
     print("\n### Rolling-horizon policies")
-    for horizon in (1, 3, 6):
-        report_simulation(instance, simulate(instance, horizon))
+    for policy in ("myopic", "lookahead"):
+        report_simulation(instance, run_simulation(instance, policy, instance.periods))
 
 
 def report(instance: Instance, solution: MILPSolution):
@@ -56,19 +56,33 @@ def report(instance: Instance, solution: MILPSolution):
 
 
 def report_simulation(instance: Instance, result: SimulationResult):
-    label = {1: "Myopic", 3: "Dynamic"}.get(result.planning_horizon, "Look-ahead")
-    print(f"\n{label} (planning_horizon={result.planning_horizon})")
-    print(
-        f"Cumulative profit {result.cumulative_profit:.2f}  "
-        f"discounted {result.discounted_profit:.2f}"
-    )
+    label = "Myopic" if result.policy == "myopic" else "Look-ahead"
+    print(f"\n{label} 누적이익: {result.cumulative_profit:.2f}")
     for p in result.periods:
-        retention = "  ".join(f"{r} {p.order_retention[r]:.3f}" for r in instance.retailers)
+        print(f"\n기간 {p.period}")
+        print(f"  D2C listing: {list(p.selected_d2c_skus)}")
         print(
-            f"  t={p.period}  assortment {{{', '.join(p.selected_d2c_skus)}}}  "
-            f"profit {p.total_profit:.2f}  cap {p.capacity_utilization:.0%}  "
-            f"retention [{retention}]"
+            "  D2C 공급량: "
+            + ", ".join(f"{i}={p.d2c_quantity[i]:.2f}" for i in instance.skus)
         )
+        print(
+            "  Retailer 공급량: "
+            + ", ".join(
+                f"{r}-{i}={p.retailer_quantity[r, i]:.2f}"
+                for r, i in instance.retailer_sku_pairs
+            )
+        )
+        print(
+            "  D2C 노출: "
+            + ", ".join(f"{r}={p.exposure[r]:.3f}" for r in instance.retailers)
+        )
+        print(
+            "  주문상태: "
+            + ", ".join(
+                f"{r}={p.order_retention[r]:.3f}" for r in instance.retailers
+            )
+        )
+        print(f"  기간이익: {p.total_profit:.2f}")
 
 
 if __name__ == "__main__":

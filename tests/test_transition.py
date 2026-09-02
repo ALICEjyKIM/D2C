@@ -16,7 +16,7 @@ def toy():
 
 
 def test_transition_matches_worked_example(toy):
-    # rho = 0.6, kappa = 0.2 in the toy instance; g = 1, e = 0.5 -> 0.96.
+    # Toy에서는 g=1, e=0.5를 넣으면 다음 retention이 0.96이다.
     state = State(period=1, order_retention={r: 1.0 for r in toy.retailers})
     nxt = next_state(toy, state, {r: 0.5 for r in toy.retailers})
 

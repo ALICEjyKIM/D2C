@@ -14,6 +14,7 @@ def toy():
 
 
 def test_load_toy_instance(toy):
+    assert toy.periods == 3
     assert len(toy.skus) == 4
     assert len(toy.retailers) == 3
     assert toy.max_d2c_skus == 2

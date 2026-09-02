@@ -1,4 +1,4 @@
-"""Gurobi formulation of the D2C assortment and allocation MILP (see docs/model.md)."""
+"""D2C assortment와 채널 배분을 위한 Gurobi MILP."""
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -14,7 +14,7 @@ def solve_milp(
     horizon: int,
     config: SolverConfig = SolverConfig(),
 ) -> MILPSolution:
-    """Solve the myopic (horizon=1) or look-ahead model from an observed state."""
+    """현재 state에서 myopic 또는 look-ahead 문제를 푼다."""
     if horizon < 1:
         raise ValueError("horizon must be at least 1")
     if not 1 <= state.period <= instance.periods:
@@ -24,7 +24,7 @@ def solve_milp(
 
     skus, retailers = instance.skus, instance.retailers
     start = state.period
-    # The look-ahead window is truncated at the end of the instance.
+    # 남은 기간보다 길면 horizon을 자동으로 줄인다.
     periods = range(start, min(start + horizon - 1, instance.periods) + 1)
     pairs = instance.retailer_sku_pairs
     retailers_of = {i: [r for r, j in pairs if j == i] for i in skus}  # R_i
@@ -38,7 +38,7 @@ def solve_milp(
 
     y = model.addVars(skus, periods, vtype=GRB.BINARY, name="y")
     q = model.addVars(skus, periods, lb=0.0, name="q")
-    # x exists only for the feasible retailer-SKU pairs.
+    # Retailer가 실제로 취급하는 SKU 조합에만 x를 만든다.
     x = model.addVars([(r, i, t) for r, i in pairs for t in periods], lb=0.0, name="x")
     g = model.addVars(retailers, periods, lb=0.0, ub=1.0, name="g")
     e = model.addVars(retailers, periods, lb=0.0, ub=1.0, name="e")
@@ -58,23 +58,23 @@ def solve_milp(
     )
 
     for t in periods:
-        # C1: D2C sales require the SKU to be listed
+        # C1: D2C에 올린 SKU만 판매할 수 있다.
         model.addConstrs(
             (q[i, t] <= skus[i].d2c_demand * y[i, t] for i in skus), name=f"C1[{t}]"
         )
 
-        # C2: assortment cardinality
+        # C2: 한 기간에 올릴 수 있는 SKU 수를 제한한다.
         model.addConstr(
             gp.quicksum(y[i, t] for i in skus) <= instance.max_d2c_skus, name=f"C2[{t}]"
         )
 
-        # C3: retailer orders scale with their current retention
+        # C3: Retailer 공급량은 현재 retention이 반영된 주문량을 넘지 않는다.
         model.addConstrs(
             (x[r, i, t] <= retailers[r].base_orders[i] * g[r, t] for r, i in pairs),
             name=f"C3[{t}]",
         )
 
-        # C4: per-SKU supply limit across both channels
+        # C4: D2C와 Retailer를 합쳐 SKU별 공급 한도를 지킨다.
         model.addConstrs(
             (
                 q[i, t] + gp.quicksum(x[r, i, t] for r in retailers_of[i])
@@ -84,7 +84,7 @@ def solve_milp(
             name=f"C4[{t}]",
         )
 
-        # C5: shared production capacity
+        # C5: 두 채널이 같은 생산 capacity를 나눠 쓴다.
         model.addConstr(
             gp.quicksum(
                 skus[i].capacity_use
@@ -95,7 +95,7 @@ def solve_milp(
             name=f"C5[{t}]",
         )
 
-        # C6: exposure of retailer r, averaged over the SKUs it carries
+        # C6: 각 Retailer가 취급하는 SKU 기준으로 D2C 노출을 계산한다.
         model.addConstrs(
             (
                 e[r, t]
@@ -110,7 +110,7 @@ def solve_milp(
             name=f"C6[{t}]",
         )
 
-    # Retention is observed at the start of the horizon and follows C7 afterwards.
+    # 시작 시점 retention은 관측값으로 고정하고 이후 기간은 C7로 연결한다.
     model.addConstrs(
         (g[r, start] == state.order_retention[r] for r in retailers), name="g_observed"
     )
@@ -118,14 +118,15 @@ def solve_milp(
         (
             g[r, t + 1]
             == instance.rho * g[r, t]
-            + (1.0 - instance.rho) * (1.0 - instance.kappa * e[r, t])
+            + (1.0 - instance.rho)
+            * (1.0 - instance.response_for(r) * e[r, t])
             for t in periods[:-1]
             for r in retailers
         ),
         name="C7",
     )
 
-    # C8 is carried by the variable domains declared above.
+    # C8의 범위 조건은 변수 생성 시점에 반영했다.
     model.optimize()
 
     status = STATUS_NAME.get(model.Status, str(model.Status))

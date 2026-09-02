@@ -1,1 +1,1 @@
-"""Core package for the D2C assortment research model."""
+"""D2C assortment 연구 모델의 핵심 패키지."""

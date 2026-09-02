@@ -1,0 +1,10 @@
+{
+  "margin_levels": [0.5, 1.0, 1.5],
+  "response_levels": [0.2, 0.4, 0.6],
+  "persistence_levels": [0.4, 0.7, 0.9],
+  "heterogeneity_levels": [
+    [0.4, 0.4, 0.4],
+    [0.2, 0.4, 0.6],
+    [0.1, 0.4, 0.7]
+  ]
+}

@@ -31,7 +31,7 @@ def test_horizon_one_solution_is_feasible_and_intuitive(toy):
     assert solution.status == "OPTIMAL"
     assert math.isfinite(solution.objective_value)
     assert solution.horizon == 1
-    # A and B carry the two largest D2C margins and are not supply constrained.
+    # A와 B는 D2C margin이 가장 높고 현재 공급 조건에서도 선택 가능하다.
     assert set(solution.selected_d2c_skus[1]) == {"A", "B"}
     assert_feasible(toy, solution)
 
@@ -54,7 +54,7 @@ def test_horizon_three_transitions_and_feasibility(toy):
 
 
 def assert_feasible(instance, solution):
-    """Re-check C1-C8 against the reported solution values."""
+    """반환된 해로 C1~C8을 다시 계산한다."""
     periods = range(solution.start_period, solution.start_period + solution.horizon)
     pairs = instance.retailer_sku_pairs
     retailers_of = {i: [r for r, j in pairs if j == i] for i in instance.skus}

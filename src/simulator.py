@@ -1,4 +1,4 @@
-"""Rolling-horizon simulation of a myopic or look-ahead planning policy."""
+"""Myopic과 look-ahead 정책을 rolling-horizon으로 실행한다."""
 
 from src.instance import make_initial_state
 from src.milp import solve_milp
@@ -17,29 +17,63 @@ def simulate(
     planning_horizon: int,
     config: SolverConfig = SolverConfig(),
 ) -> SimulationResult:
-    """Run all instance.periods, re-planning each period and executing its first."""
+    """기존 planning_horizon 호출 방식을 유지한다."""
+    policy = "myopic" if planning_horizon == 1 else "lookahead"
+    return _run(instance, policy, instance.periods, planning_horizon, config)
+
+
+def run_simulation(
+    instance: Instance,
+    policy: str,
+    periods: int | None = None,
+    config: SolverConfig = SolverConfig(),
+) -> SimulationResult:
+    """Myopic 또는 look-ahead 정책을 rolling-horizon으로 실행한다."""
+    if policy not in {"myopic", "lookahead"}:
+        raise ValueError("policy must be 'myopic' or 'lookahead'")
+
+    periods = instance.periods if periods is None else periods
+    if not 1 <= periods <= instance.periods:
+        raise ValueError("periods must be between 1 and instance.periods")
+
+    planning_horizon = 1 if policy == "myopic" else periods
+    return _run(instance, policy, periods, planning_horizon, config)
+
+
+def _run(
+    instance: Instance,
+    policy: str,
+    periods: int,
+    planning_horizon: int,
+    config: SolverConfig,
+) -> SimulationResult:
     state = make_initial_state(instance)
-    periods = []
-    while state.period <= instance.periods:
+    results = []
+    while state.period <= periods:
         t = state.period
-        # solve_milp truncates the look-ahead window at the end of the instance.
-        solution = solve_milp(instance, state, planning_horizon, config)
-        periods.append(period_result(instance, solution, t))
+        horizon = min(planning_horizon, periods - t + 1)
+        solution = solve_milp(instance, state, horizon, config)
+
+        # 이번 기간에 실행할 배분만 가져온다
+        results.append(period_result(instance, solution, t))
         exposure = {r: solution.exposure[r, t] for r in instance.retailers}
+
+        # D2C 노출을 반영해 다음 기간 주문상태를 갱신한다
         state = next_state(instance, state, exposure)
 
     gamma = instance.gamma
     return SimulationResult(
         instance_id=instance.instance_id,
+        policy=policy,
         planning_horizon=planning_horizon,
-        periods=periods,
-        cumulative_profit=sum(p.total_profit for p in periods),
-        discounted_profit=sum(gamma ** (p.period - 1) * p.total_profit for p in periods),
+        periods=results,
+        cumulative_profit=sum(p.total_profit for p in results),
+        discounted_profit=sum(gamma ** (p.period - 1) * p.total_profit for p in results),
     )
 
 
 def period_result(instance: Instance, solution: MILPSolution, t: int) -> PeriodResult:
-    """Profit and slack accounting for period t of a solved (look-ahead) plan."""
+    """계획에서 기간 t의 실행 결과와 이익을 따로 정리한다."""
     skus, retailers = instance.skus, instance.retailers
     pairs = instance.retailer_sku_pairs
     retailers_of = {i: [r for r, j in pairs if j == i] for i in skus}
