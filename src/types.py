@@ -64,7 +64,7 @@ class SolverConfig:
 @dataclass(frozen=True, slots=True)
 class MILPSolution:
     status: str
-    objective_value: float
+    objective_value: float  # gamma를 적용한 계획이익
     start_period: int
     horizon: int
     selected_d2c_skus: dict[int, tuple[str, ...]]  # 기간별 D2C assortment
@@ -80,7 +80,7 @@ class MILPSolution:
 @dataclass(frozen=True, slots=True)
 class ScenarioBestResult:
     scenario_id: str
-    best_profit: float
+    best_profit: float  # 시나리오별 최적 계획이익
     solution: MILPSolution
 
 
@@ -95,7 +95,7 @@ class FirstStageDecision:
 class ScenarioRegretResult:
     scenario_id: str
     best_profit: float
-    policy_profit: float
+    policy_profit: float  # 공통 현재 결정 아래의 계획이익
     absolute_regret: float
     relative_regret: float
     solution: MILPSolution

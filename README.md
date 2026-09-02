@@ -5,6 +5,13 @@ allocation decisions while independent retailers adjust their future baseline
 orders in response to D2C exposure. It also supports exact minimax relative
 regret planning over a finite scenario set.
 
+Planning scenarios freeze the observed current-period market row and order
+retention, then branch only future demand and margins. Evaluation paths remain
+full realized paths; one of their period rows can be passed as
+`current_observation` when planning. The toy three-period experiment sets
+`gamma=1`, so MILP planning profit and simulator cumulative profit use the same
+undiscounted basis.
+
 ## Current scope
 
 The current baseline includes a controlled 4-SKU, 3-retailer instance, validated

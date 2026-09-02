@@ -157,7 +157,7 @@ def calculate_scenario_profit(
     scenario: dict,
     solution: MILPSolution,
 ) -> float:
-    """반환된 해의 시나리오별 할인 이익을 직접 다시 계산한다."""
+    """반환된 해의 시나리오별 계획이익을 직접 다시 계산한다."""
     periods = tuple(
         range(solution.start_period, solution.start_period + solution.horizon)
     )
@@ -386,7 +386,7 @@ def _add_scenario_plan(
         model.addConstrs(
             (
                 q[i, t] + gp.quicksum(x[r, i, t] for r in retailers_of[i])
-                <= skus[i].supply_limit
+                <= rows[t]["supply_limit"][i]
                 for i in skus
             ),
             name=f"{name}C4[{t}]",
@@ -397,7 +397,7 @@ def _add_scenario_plan(
                 * (q[i, t] + gp.quicksum(x[r, i, t] for r in retailers_of[i]))
                 for i in skus
             )
-            <= instance.capacity,
+            <= rows[t]["capacity"],
             name=f"{name}C5[{t}]",
         )
         model.addConstrs(
@@ -457,6 +457,10 @@ def _scenario_rows(
                     for r, retailer in instance.retailers.items()
                 },
                 "d2c_fixed_cost": {i: 0.0 for i in instance.skus},
+                "supply_limit": {
+                    i: sku.supply_limit for i, sku in instance.skus.items()
+                },
+                "capacity": instance.capacity,
                 "response": {
                     r: instance.response_for(r) for r in instance.retailers
                 },
@@ -487,6 +491,20 @@ def _scenario_rows(
         fixed_cost = {i: float(row["d2c_fixed_cost"][i]) for i in instance.skus}
         if any(abs(value) > 1e-12 for value in fixed_cost.values()):
             raise ValueError("d2c_fixed_cost must remain zero")
+        supply_limit = row.get(
+            "supply_limit",
+            {i: sku.supply_limit for i, sku in instance.skus.items()},
+        )
+        _require_keys(supply_limit, instance.skus, "supply_limit")
+        supply_limit = {i: float(supply_limit[i]) for i in instance.skus}
+        if any(
+            not math.isfinite(value) or value < 0
+            for value in supply_limit.values()
+        ):
+            raise ValueError("supply_limit values must be finite and nonnegative")
+        capacity = float(row.get("capacity", instance.capacity))
+        if not math.isfinite(capacity) or capacity <= 0:
+            raise ValueError("capacity must be finite and positive")
 
         base_demand = {}
         retailer_margin = {}
@@ -518,6 +536,8 @@ def _scenario_rows(
             },
             "retailer_margin": retailer_margin,
             "d2c_fixed_cost": fixed_cost,
+            "supply_limit": supply_limit,
+            "capacity": capacity,
             "response": _retailer_values(
                 instance, row["response"], "response"
             ),
@@ -543,8 +563,37 @@ def _validate_scenario_set(
     if end > instance.periods:
         raise ValueError("scenario end lies outside the instance periods")
     periods = tuple(range(state.period, end + 1))
+    observed = None
+    observed_fields = (
+        "d2c_demand",
+        "retailer_base_demand",
+        "d2c_margin",
+        "retailer_margin",
+        "d2c_fixed_cost",
+        "supply_limit",
+        "capacity",
+    )
     for scenario in scenarios:
-        _scenario_rows(instance, scenario, periods)
+        rows = _scenario_rows(instance, scenario, periods)
+        current = rows[state.period]
+        if observed is None:
+            observed = current
+        elif any(current[field] != observed[field] for field in observed_fields):
+            raise ValueError(
+                "current-period market inputs must be common across scenarios"
+            )
+        retention = scenario.get("current_order_retention")
+        if retention is not None:
+            _require_keys(retention, instance.retailers, "current_order_retention")
+            if any(
+                not math.isclose(
+                    float(retention[r]), state.order_retention[r], abs_tol=1e-9
+                )
+                for r in instance.retailers
+            ):
+                raise ValueError(
+                    "current order retention must match the observed state"
+                )
     return periods
 
 

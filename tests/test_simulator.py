@@ -143,6 +143,15 @@ def test_discounted_profit_is_preserved(toy):
     assert result.discounted_profit == pytest.approx(expected, abs=1e-4)
 
 
+def test_toy_uses_same_cumulative_and_planning_profit_basis(toy):
+    result = run(toy, "lookahead")
+
+    assert toy.gamma == 1.0
+    assert result.discounted_profit == pytest.approx(
+        result.cumulative_profit, abs=1e-4
+    )
+
+
 def test_invalid_policy_is_rejected(toy):
     with pytest.raises(ValueError, match="policy"):
         run_simulation(toy, "unknown", toy.periods)

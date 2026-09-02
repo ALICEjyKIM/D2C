@@ -12,6 +12,7 @@ from src.scenarios import (
     sample_range,
     validate_scenarios,
 )
+from src.types import State
 
 
 TOY_PATH = "configs/toy.json"
@@ -80,14 +81,27 @@ def test_planning_and_evaluation_paths_are_separate(toy):
     assert planning[0]["scenario_id"] == "S001"
     assert evaluation[0]["scenario_id"] == "E001"
     assert planning != evaluation
+    assert planning[0]["periods"][0]["d2c_demand"] == {
+        i: sku.d2c_demand for i, sku in toy.skus.items()
+    }
+    assert evaluation[0]["periods"][0]["d2c_demand"] != planning[0]["periods"][0][
+        "d2c_demand"
+    ]
 
 
 def test_zero_uncertainty_preserves_base_values_and_instance(toy):
     original = copy.deepcopy(toy)
-    scenarios = generate_planning_scenarios(toy, 2, 3, 10, 0.0, 3)
+    state = State(
+        period=2,
+        order_retention={"R1": 0.91, "R2": 0.87, "R3": 0.95},
+    )
+    scenarios = generate_planning_scenarios(
+        toy, 2, 3, 10, 0.0, 3, current_state=state
+    )
 
     assert toy == original
     for scenario in scenarios:
+        assert scenario["current_order_retention"] == state.order_retention
         assert [row["period"] for row in scenario["periods"]] == [2, 3]
         for row in scenario["periods"]:
             assert row["d2c_demand"] == {
@@ -103,7 +117,11 @@ def test_zero_uncertainty_preserves_base_values_and_instance(toy):
 
 
 def test_builds_three_explicit_regret_scenarios(toy):
-    scenarios = build_regret_scenarios(toy)
+    state = State(
+        period=1,
+        order_retention={r: 1.0 for r in toy.retailers},
+    )
+    scenarios = build_regret_scenarios(toy, current_state=state)
 
     assert [scenario["scenario_id"] for scenario in scenarios] == [
         "D2C-friendly",
@@ -111,10 +129,104 @@ def test_builds_three_explicit_regret_scenarios(toy):
         "Relationship-sensitive",
     ]
     assert validate_scenarios(scenarios)
-    assert scenarios[0]["periods"][0]["d2c_demand"]["A"] > toy.skus["A"].d2c_demand
+    current_rows = [scenario["periods"][0] for scenario in scenarios]
+    observed_fields = (
+        "supply_limit",
+        "capacity",
+        "d2c_demand",
+        "retailer_base_demand",
+        "d2c_margin",
+        "retailer_margin",
+        "d2c_fixed_cost",
+    )
+    assert all(
+        all(row[field] == current_rows[0][field] for field in observed_fields)
+        for row in current_rows[1:]
+    )
+    assert current_rows[0]["d2c_demand"]["A"] == toy.skus["A"].d2c_demand
+    assert scenarios[0]["periods"][1]["d2c_demand"]["A"] > toy.skus["A"].d2c_demand
     assert scenarios[2]["periods"][0]["response"] == {
         r: 0.6 for r in toy.retailers
     }
+
+
+def test_planning_scenarios_fix_observed_current_inputs(toy):
+    state = State(
+        period=1,
+        order_retention={"R1": 0.92, "R2": 0.88, "R3": 0.96},
+    )
+    scenarios = generate_planning_scenarios(
+        toy, 1, 3, 10, 0.3, 41, current_state=state
+    )
+
+    for scenario in scenarios:
+        current = scenario["periods"][0]
+        assert current["supply_limit"] == {
+            i: sku.supply_limit for i, sku in toy.skus.items()
+        }
+        assert current["capacity"] == toy.capacity
+        assert current["d2c_demand"] == {
+            i: sku.d2c_demand for i, sku in toy.skus.items()
+        }
+        assert current["retailer_base_demand"] == {
+            r: retailer.base_orders for r, retailer in toy.retailers.items()
+        }
+        assert current["d2c_margin"] == {
+            i: sku.d2c_margin for i, sku in toy.skus.items()
+        }
+        assert current["retailer_margin"] == {
+            r: retailer.wholesale_margins
+            for r, retailer in toy.retailers.items()
+        }
+        assert scenario["current_order_retention"] == state.order_retention
+
+    assert any(
+        scenario["periods"][1]["d2c_demand"]
+        != scenarios[0]["periods"][1]["d2c_demand"]
+        for scenario in scenarios[1:]
+    )
+
+
+def test_planning_scenarios_copy_an_evaluation_path_observation(toy):
+    evaluation = generate_evaluation_paths(toy, 2, 3, 1, 0.2, 19)[0]
+    observation = evaluation["periods"][0]
+    state = State(
+        period=2,
+        order_retention={"R1": 0.93, "R2": 0.89, "R3": 0.91},
+    )
+    scenarios = build_regret_scenarios(
+        toy,
+        start_period=2,
+        end_period=3,
+        current_state=state,
+        current_observation=observation,
+    )
+    lhs_scenarios = generate_planning_scenarios(
+        toy,
+        2,
+        3,
+        3,
+        0.2,
+        23,
+        current_state=state,
+        current_observation=observation,
+    )
+    observed_fields = (
+        "supply_limit",
+        "capacity",
+        "d2c_demand",
+        "retailer_base_demand",
+        "d2c_margin",
+        "retailer_margin",
+        "d2c_fixed_cost",
+    )
+
+    for scenario in scenarios + lhs_scenarios:
+        current = scenario["periods"][0]
+        assert all(current[field] == observation[field] for field in observed_fields)
+        assert scenario["current_order_retention"] == state.order_retention
+
+    assert scenarios[0]["periods"][0]["response"] != observation["response"]
 
 
 def test_sample_range_uses_each_latin_hypercube_stratum_once():
